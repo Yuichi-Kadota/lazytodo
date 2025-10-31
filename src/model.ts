@@ -32,7 +32,7 @@ export interface Theme {
 export interface AppConfig {
   dataPath: string; // JSON 永続化先（既定: ~/.config/todoq/data.json）
   exportDir?: string; // エクスポート先（md/csv）
-  theme: Theme | { preset: "dark" | "light" };
+  theme: Theme;
   keymap: KeyBinding; // 既定をマージ
   listWindowSize?: number; // 仮想スクロール: 表示ウィンドウ行数
 }
@@ -68,4 +68,8 @@ export const DEFAULT_KEYMAP: KeyBinding = {
   openModal: ["enter", "o"],
   toggleDone: ["x"],
   delete: ["d", "D"],
+  add: "a",
+  quit: "q",
+  exportMd: "m",
+  exportCsv: "c",
 }; 
