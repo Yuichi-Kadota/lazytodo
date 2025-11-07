@@ -2,17 +2,17 @@
 import React from "react";
 import { render } from "ink";
 import { Command } from "commander";
-import App from "./app.js";
-import { loadConfig, saveExampleConfig } from "./config.js";
-import { DEFAULT_THEME_DARK } from "./model.js";
-import { useStore } from "./state/store.js";
-import { exportCsv, exportMarkdown, loadData, loadDataLazy, saveData } from "./persistence.js";
+import App from "./app";
+import { loadConfig, saveExampleConfig } from "./config";
+import { DEFAULT_THEME_DARK } from "./model";
+import { useStore } from "./state/store";
+import { exportCsv, exportMarkdown, loadData, loadDataLazy, saveData } from "./persistence";
 
 
 const program = new Command();
 program
-  .name("lazyqueue")
-  .description("LazyQueue — Single-queue TODO (Ink)")
+  .name("lazytodo")
+  .description("LazyTodo — Single-queue TODO (Ink)")
   .option("--data <path>", "data.json path")
   .option("--export-dir <dir>", "export directory")
   .option("--write-sample-config", "write ~/.config/todoq/config.yaml if missing")
@@ -31,7 +31,6 @@ const theme = config.theme || DEFAULT_THEME_DARK;
 
 // Main async function to avoid top-level await
 (async () => {
-  // 🔹 遅延ロード：巨大データはチャンクで投入
   let loaded = false;
   for await (const chunk of (loadDataLazy(config.dataPath))) {
     loaded = true;
@@ -43,7 +42,7 @@ const theme = config.theme || DEFAULT_THEME_DARK;
     useStore.getState().setTodos(data.todos);
   }
 
-  // 🔸 同期保存：todos が変わるたびに即時保存
+  // 同期保存：todos が変わるたびに即時保存
   useStore.subscribe((state) => {
     saveData(config.dataPath, { todos: state.todos });
   });
