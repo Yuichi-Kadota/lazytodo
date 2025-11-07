@@ -20,6 +20,7 @@ export type Store = {
   openModal: () => void;
   closeModal: () => void;
   updateDetailTags: (idx: number, detail: string, tags: string[]) => void;
+  updateTodo: (idx: number, title: string, detail: string, tags: string[]) => void;
 }
 
 
@@ -36,5 +37,6 @@ export const useStore = create<Store>((set, get) => ({
   setCursor: (i) => set(s => ({ ui: { ...s.ui, cursor: Math.max(0, Math.min(i, s.todos.length - 1)) } })),
   openModal: () => set(s => ({ ui: { ...s.ui, modalOpen: true } })),
   closeModal: () => set(s => ({ ui: { ...s.ui, modalOpen: false } })),
-  updateDetailTags: (idx, detail, tags) => set(s => ({ todos: s.todos.map((t, i) => i === idx ? { ...t, detail, tags } : t) }))
+  updateDetailTags: (idx, detail, tags) => set(s => ({ todos: s.todos.map((t, i) => i === idx ? { ...t, detail, tags } : t) })),
+  updateTodo: (idx, title, detail, tags) => set(s => ({ todos: s.todos.map((t, i) => i === idx ? { ...t, title, detail, tags } : t) }))
 }));

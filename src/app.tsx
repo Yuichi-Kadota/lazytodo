@@ -24,11 +24,8 @@ export default function App({ theme, config, onExportMd, onExportCsv }: {
     const k = config.keymap;
     if (matchKey(k.quit, input, key)) exit();
     else if (ui.modalOpen) {
-      if (key.return) {
-        closeModal();
-      } else if (key.escape) {
-        closeModal();
-      }
+      // Modal handles its own input (Ctrl+S to save, Esc to cancel)
+      // Don't process any keys here when modal is open
       return;
     } else {
       if (matchKey(k.down, input, key)) setCursor(useStore.getState().ui.cursor + 1);
