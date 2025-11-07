@@ -1,12 +1,10 @@
 export type ID = string;
-export type Tag = string;
 
 
 export interface Todo {
   id: ID;
   title: string; // list はタイトルのみ表示
   detail?: string; // モーダルで表示/編集
-  tags?: Tag[]; // モーダルで表示/編集
   createdAt: number; // epoch ms
   done?: boolean; // 将来的な拡張
 }

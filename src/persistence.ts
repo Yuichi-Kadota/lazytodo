@@ -46,9 +46,8 @@ export function exportMarkdown(dir: string, todos: Todo[]) {
   lines.push(`# TODO Queue`);
   lines.push("");
   for (const t of todos) {
-    const tagStr = t.tags?.length ? ` [${t.tags.join(', ')}]` : "";
     const detail = t.detail ? `\n${t.detail.replace(/\n/g, "\n")}` : "";
-    lines.push(`- [${t.done ? "x" : " "}] ${t.title}${tagStr}${detail}`);
+    lines.push(`- [${t.done ? "x" : " "}] ${t.title}${detail}`);
   }
   const out = path.join(dir, `todoq_${new Date().toISOString().slice(0, 10)}.md`);
   fs.writeFileSync(out, lines.join("\n"), "utf8");
@@ -56,12 +55,11 @@ export function exportMarkdown(dir: string, todos: Todo[]) {
 }
 
 export function exportCsv(dir: string, todos: Todo[]) {
-  const head = ["id", "title", "detail", "tags", "createdAt", "done"];
+  const head = ["id", "title", "detail", "createdAt", "done"];
   const rows = todos.map(t => [
     t.id,
     escapeCsv(t.title),
     escapeCsv(t.detail || ""),
-    escapeCsv((t.tags || []).join("|")),
     String(t.createdAt),
     t.done ? "1" : "0"
   ].join(","));

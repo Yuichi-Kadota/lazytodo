@@ -49,3 +49,4 @@ lerna-debug.log*
 *.tmp
 *.temp
 .cache/
+todo.md

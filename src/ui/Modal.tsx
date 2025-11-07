@@ -5,7 +5,7 @@ import { useStore } from "../state/store";
 import { Theme } from "../model";
 
 
-type Field = "title" | "tags" | "detail";
+type Field = "title" | "detail";
 type Mode = "browse" | "edit";
 
 export default function Modal({ theme, width }: { theme: Theme, width: number }) {
@@ -14,7 +14,6 @@ export default function Modal({ theme, width }: { theme: Theme, width: number })
   const t = todos[idx];
 
   const [title, setTitle] = useState<string>(t?.title || "");
-  const [tags, setTags] = useState<string>((t?.tags || []).join(", "));
   const [detail, setDetail] = useState<string>(t?.detail || "");
   const [selectedField, setSelectedField] = useState<Field>("title");
   const [mode, setMode] = useState<Mode>("browse");
@@ -22,22 +21,16 @@ export default function Modal({ theme, width }: { theme: Theme, width: number })
   if (!ui.modalOpen || !t) return null;
 
   const handleSave = () => {
-    const tagArray = tags
-      .split(",")
-      .map(s => s.trim())
-      .filter(s => s.length > 0);
-    updateTodo(idx, title, detail, tagArray);
+    updateTodo(idx, title, detail);
     closeModal();
   };
 
   const moveFieldDown = () => {
-    if (selectedField === "title") setSelectedField("tags");
-    else if (selectedField === "tags") setSelectedField("detail");
+    if (selectedField === "title") setSelectedField("detail");
   };
 
   const moveFieldUp = () => {
-    if (selectedField === "detail") setSelectedField("tags");
-    else if (selectedField === "tags") setSelectedField("title");
+    if (selectedField === "detail") setSelectedField("title");
   };
 
   useInput((input, key) => {
@@ -90,20 +83,6 @@ export default function Modal({ theme, width }: { theme: Theme, width: number })
             />
           ) : (
             <Text>{title || "(empty)"}</Text>
-          )}
-        </Box>
-        <Box marginTop={1}>
-          <Text>{getCursor("tags")}</Text>
-          <Text color={getFieldColor("tags")}>Tags: </Text>
-          {mode === "edit" && selectedField === "tags" ? (
-            <TextInput
-              value={tags}
-              onChange={setTags}
-              placeholder="tag1, tag2, ..."
-              focus={true}
-            />
-          ) : (
-            <Text>{tags || "(none)"}</Text>
           )}
         </Box>
         <Box marginTop={1}>
