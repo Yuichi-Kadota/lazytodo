@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { Todo } from "./model.js";
+import type { Todo } from "./model";
 
 export interface DataShape {
   todos: Todo[];

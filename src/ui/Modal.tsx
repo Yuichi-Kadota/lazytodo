@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Box, Text } from "ink";
-import { useStore } from "../state/store.js";
-import { Theme } from "../model.js";
+import { useStore } from "../state/store";
+import { Theme } from "../model";
 
 
 export default function Modal({ theme, width }: { theme: Theme, width: number }) {

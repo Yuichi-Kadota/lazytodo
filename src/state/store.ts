@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { Todo, ID } from "../model.js";
+import { Todo, ID } from "../model";
 
 
 export type UIState = {

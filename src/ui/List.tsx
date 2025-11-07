@@ -1,8 +1,8 @@
 import React, { useMemo } from "react";
 import { Box, Text } from "ink";
 import stringWidth from "string-width";
-import { useStore } from "../state/store.js";
-import { Theme } from "../model.js";
+import { useStore } from "../state/store";
+import { Theme } from "../model";
 
 
 export function List({ theme, width, height, windowSize }: { theme: Theme, width: number, height: number, windowSize: number }) {

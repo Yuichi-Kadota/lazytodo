@@ -1,4 +1,4 @@
-import { KeyBinding } from "./model.js";
+import { KeyBinding } from "./model";
 
 
 export function matchKey(binding: string | string[], input: string, key: any): boolean {

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import YAML from "yaml";
-import { AppConfig, DEFAULT_KEYMAP, DEFAULT_THEME_DARK, DEFAULT_THEME_LIGHT, Theme } from "./model.js";
+import { AppConfig, DEFAULT_KEYMAP, DEFAULT_THEME_DARK, DEFAULT_THEME_LIGHT, Theme } from "./model";
 
 
 const XDG = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");

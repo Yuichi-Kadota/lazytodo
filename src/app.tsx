@@ -1,12 +1,12 @@
 import React, { useEffect, useState, Suspense } from "react";
 import { Box, Text, useApp, useInput, measureElement } from "ink";
-import { useStore } from "./state/store.js";
-import { Theme, AppConfig } from "./model.js";
-import { List } from "./ui/List.js";
-import { matchKey } from "./keymap.js";
+import { useStore } from "./state/store";
+import { Theme, AppConfig } from "./model";
+import { List } from "./ui/List";
+import { matchKey } from "./keymap";
 
 
-const LazyModal = React.lazy(() => import("./ui/Modal.js"));
+const LazyModal = React.lazy(() => import("./ui/Modal"));
 
 
 export default function App({ theme, config, onExportMd, onExportCsv }: {
