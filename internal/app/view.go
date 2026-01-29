@@ -88,7 +88,7 @@ func (m Model) renderWelcome() string {
 
 	hint := lipgloss.NewStyle().
 		Foreground(ui.ColorMuted).
-		Render("Press 'A' to create your first\nworkspace, or '?' for help")
+		Render("Press 'a' to create your first\nworkspace, or '?' for help")
 
 	content := fmt.Sprintf("%s\n\n%s\n\n%s", icon, title, hint)
 	boxContent := box.Render(content)

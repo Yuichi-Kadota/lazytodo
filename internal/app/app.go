@@ -37,6 +37,7 @@ type Model struct {
 	// Input state
 	inputBuffer string
 	inputPrompt string
+	inputAction string // "add", "add_child", "edit"
 
 	// Notification
 	notification    string

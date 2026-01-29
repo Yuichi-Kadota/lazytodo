@@ -1,10 +1,12 @@
 package app
 
 import (
+	"context"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/yuichikadota/lazytodo/internal/domain"
 	"github.com/yuichikadota/lazytodo/internal/input"
 )
 
@@ -58,6 +60,46 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	// Todo CRUD responses
+	case todoCreatedMsg:
+		m.notification = "Todo created"
+		m.notificationErr = false
+		return m, tea.Batch(m.loadTodos(), clearNotificationAfter(2*time.Second))
+
+	case todoUpdatedMsg:
+		m.notification = "Todo updated"
+		m.notificationErr = false
+		return m, tea.Batch(m.loadTodos(), clearNotificationAfter(2*time.Second))
+
+	case todoDeletedMsg:
+		m.notification = "Todo deleted"
+		m.notificationErr = false
+		// Adjust selection if needed
+		if m.selectedTodoIndex > 0 {
+			m.selectedTodoIndex--
+		}
+		return m, tea.Batch(m.loadTodos(), clearNotificationAfter(2*time.Second))
+
+	// Workspace CRUD responses
+	case workspaceCreatedMsg:
+		m.notification = "Workspace created"
+		m.notificationErr = false
+		return m, tea.Batch(m.loadWorkspaces(), clearNotificationAfter(2*time.Second))
+
+	case workspaceUpdatedMsg:
+		m.notification = "Workspace updated"
+		m.notificationErr = false
+		return m, tea.Batch(m.loadWorkspaces(), clearNotificationAfter(2*time.Second))
+
+	case workspaceDeletedMsg:
+		m.notification = "Workspace deleted"
+		m.notificationErr = false
+		// Adjust selection if needed
+		if m.selectedWsIndex > 0 {
+			m.selectedWsIndex--
+		}
+		return m, tea.Batch(m.loadWorkspaces(), clearNotificationAfter(2*time.Second))
+
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
 	}
@@ -97,10 +139,11 @@ func (m Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.pendingDelete = false
 		if key == "d" {
 			// Execute delete
-			// TODO: Implement delete
-			m.notification = "Deleted"
-			m.notificationErr = false
-			return m, clearNotificationAfter(2 * time.Second)
+			if m.activePane == PaneTodo && m.SelectedTodo() != nil {
+				return m, m.deleteTodo()
+			} else if m.activePane == PaneWorkspace && m.SelectedWorkspace() != nil {
+				return m, m.deleteWorkspace()
+			}
 		}
 		// Cancel delete
 		return m, nil
@@ -136,25 +179,33 @@ func (m Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Actions
 	case "i":
 		// Edit current item
-		m.mode = input.ModeInsert
-		m.inputPrompt = "Edit: "
-		if m.activePane == PaneWorkspace && m.SelectedWorkspace() != nil {
-			m.inputBuffer = m.SelectedWorkspace().Name
-		} else if m.activePane == PaneTodo && m.SelectedTodo() != nil {
+		if m.activePane == PaneTodo && m.SelectedTodo() != nil {
+			m.mode = input.ModeInsert
+			m.inputPrompt = "Edit: "
+			m.inputAction = "edit"
 			m.inputBuffer = m.SelectedTodo().Description
+		} else if m.activePane == PaneWorkspace && m.SelectedWorkspace() != nil {
+			m.mode = input.ModeInsert
+			m.inputPrompt = "Edit: "
+			m.inputAction = "edit"
+			m.inputBuffer = m.SelectedWorkspace().Name
 		}
 		return m, nil
 	case "a":
 		// Add new item
 		m.mode = input.ModeInsert
 		m.inputPrompt = "Add: "
+		m.inputAction = "add"
 		m.inputBuffer = ""
 		return m, nil
 	case "A":
-		// Add child item
-		m.mode = input.ModeInsert
-		m.inputPrompt = "Add child: "
-		m.inputBuffer = ""
+		// Add child item (only for todos)
+		if m.activePane == PaneTodo && m.SelectedTodo() != nil {
+			m.mode = input.ModeInsert
+			m.inputPrompt = "Add child: "
+			m.inputAction = "add_child"
+			m.inputBuffer = ""
+		}
 		return m, nil
 	case "d":
 		// Start delete sequence
@@ -162,8 +213,8 @@ func (m Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "enter", " ":
 		// Toggle status (for todos)
-		if m.activePane == PaneTodo {
-			// TODO: Implement toggle
+		if m.activePane == PaneTodo && m.SelectedTodo() != nil {
+			return m, m.toggleTodoStatus()
 		}
 		return m, nil
 	case "o":
@@ -196,16 +247,43 @@ func (m Model) handleInsertMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = input.ModeNormal
 		m.inputBuffer = ""
 		m.inputPrompt = ""
+		m.inputAction = ""
 		return m, nil
 	case "enter":
 		// Confirm input
-		// TODO: Implement save
+		if m.inputBuffer == "" {
+			m.mode = input.ModeNormal
+			m.inputBuffer = ""
+			m.inputPrompt = ""
+			m.inputAction = ""
+			return m, nil
+		}
+
+		var cmd tea.Cmd
+		switch m.inputAction {
+		case "add":
+			if m.activePane == PaneTodo {
+				cmd = m.createTodo(m.inputBuffer, "")
+			} else {
+				cmd = m.createWorkspace(m.inputBuffer, "")
+			}
+		case "add_child":
+			if m.activePane == PaneTodo && m.SelectedTodo() != nil {
+				cmd = m.createTodo(m.inputBuffer, m.SelectedTodo().ID)
+			}
+		case "edit":
+			if m.activePane == PaneTodo && m.SelectedTodo() != nil {
+				cmd = m.updateTodo(m.inputBuffer)
+			} else if m.activePane == PaneWorkspace && m.SelectedWorkspace() != nil {
+				cmd = m.updateWorkspace(m.inputBuffer)
+			}
+		}
+
 		m.mode = input.ModeNormal
-		m.notification = "Saved"
-		m.notificationErr = false
 		m.inputBuffer = ""
 		m.inputPrompt = ""
-		return m, clearNotificationAfter(2 * time.Second)
+		m.inputAction = ""
+		return m, cmd
 	case "backspace":
 		if len(m.inputBuffer) > 0 {
 			m.inputBuffer = m.inputBuffer[:len(m.inputBuffer)-1]
@@ -334,3 +412,139 @@ func clearNotificationAfter(d time.Duration) tea.Cmd {
 		return clearNotificationMsg{}
 	})
 }
+
+// Todo CRUD commands
+
+func (m Model) createTodo(description string, parentID string) tea.Cmd {
+	return func() tea.Msg {
+		ws := m.SelectedWorkspace()
+		if ws == nil {
+			return errMsg{domain.ErrNotFound}
+		}
+
+		todo := &domain.Todo{
+			WorkspaceID: ws.ID,
+			Description: description,
+			Status:      domain.StatusPending,
+			Urgency:     domain.UrgencyMedium,
+			ParentID:    parentID,
+		}
+
+		if err := m.todoRepo.Create(context.Background(), todo); err != nil {
+			return errMsg{err}
+		}
+
+		return todoCreatedMsg{todo: todo}
+	}
+}
+
+func (m Model) updateTodo(description string) tea.Cmd {
+	return func() tea.Msg {
+		todo := m.SelectedTodo()
+		if todo == nil {
+			return errMsg{domain.ErrNotFound}
+		}
+
+		todo.Description = description
+		if err := m.todoRepo.Update(context.Background(), todo); err != nil {
+			return errMsg{err}
+		}
+
+		return todoUpdatedMsg{todo: todo}
+	}
+}
+
+func (m Model) deleteTodo() tea.Cmd {
+	return func() tea.Msg {
+		todo := m.SelectedTodo()
+		if todo == nil {
+			return errMsg{domain.ErrNotFound}
+		}
+
+		if err := m.todoRepo.Delete(context.Background(), todo.ID); err != nil {
+			return errMsg{err}
+		}
+
+		return todoDeletedMsg{id: todo.ID}
+	}
+}
+
+func (m Model) toggleTodoStatus() tea.Cmd {
+	return func() tea.Msg {
+		todo := m.SelectedTodo()
+		if todo == nil {
+			return errMsg{domain.ErrNotFound}
+		}
+
+		if todo.Status == domain.StatusPending {
+			todo.Status = domain.StatusCompleted
+			now := time.Now()
+			todo.CompletedAt = &now
+		} else {
+			todo.Status = domain.StatusPending
+			todo.CompletedAt = nil
+		}
+
+		if err := m.todoRepo.Update(context.Background(), todo); err != nil {
+			return errMsg{err}
+		}
+
+		return todoUpdatedMsg{todo: todo}
+	}
+}
+
+// Workspace CRUD commands
+
+func (m Model) createWorkspace(name string, parentID string) tea.Cmd {
+	return func() tea.Msg {
+		ws := &domain.Workspace{
+			Name:     name,
+			ParentID: parentID,
+		}
+
+		if err := m.workspaceRepo.Create(context.Background(), ws); err != nil {
+			return errMsg{err}
+		}
+
+		return workspaceCreatedMsg{workspace: ws}
+	}
+}
+
+func (m Model) updateWorkspace(name string) tea.Cmd {
+	return func() tea.Msg {
+		ws := m.SelectedWorkspace()
+		if ws == nil {
+			return errMsg{domain.ErrNotFound}
+		}
+
+		ws.Name = name
+		if err := m.workspaceRepo.Update(context.Background(), ws); err != nil {
+			return errMsg{err}
+		}
+
+		return workspaceUpdatedMsg{workspace: ws}
+	}
+}
+
+func (m Model) deleteWorkspace() tea.Cmd {
+	return func() tea.Msg {
+		ws := m.SelectedWorkspace()
+		if ws == nil {
+			return errMsg{domain.ErrNotFound}
+		}
+
+		if err := m.workspaceRepo.Delete(context.Background(), ws.ID); err != nil {
+			return errMsg{err}
+		}
+
+		return workspaceDeletedMsg{id: ws.ID}
+	}
+}
+
+// Message types for CRUD operations
+type todoCreatedMsg struct{ todo *domain.Todo }
+type todoUpdatedMsg struct{ todo *domain.Todo }
+type todoDeletedMsg struct{ id string }
+type workspaceCreatedMsg struct{ workspace *domain.Workspace }
+type workspaceUpdatedMsg struct{ workspace *domain.Workspace }
+type workspaceDeletedMsg struct{ id string }
