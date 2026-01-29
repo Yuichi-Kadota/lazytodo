@@ -10,13 +10,21 @@ import (
 )
 
 func main() {
+	model := app.New(app.Config{})
+
 	p := tea.NewProgram(
-		app.New(),
+		model,
 		tea.WithAltScreen(),
 	)
 
-	if _, err := p.Run(); err != nil {
+	finalModel, err := p.Run()
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
+	}
+
+	// Close database connection
+	if m, ok := finalModel.(app.Model); ok {
+		m.Close()
 	}
 }
