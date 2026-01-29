@@ -2,7 +2,11 @@ module github.com/yuichikadota/lazytodo
 
 go 1.21.1
 
-require github.com/charmbracelet/bubbletea v1.2.4
+require (
+	github.com/charmbracelet/bubbletea v1.2.4
+	github.com/google/uuid v1.6.0
+	github.com/mattn/go-sqlite3 v1.14.33
+)
 
 require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
