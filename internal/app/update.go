@@ -8,6 +8,7 @@ import (
 
 	"github.com/yuichikadota/lazytodo/internal/domain"
 	"github.com/yuichikadota/lazytodo/internal/input"
+	"github.com/yuichikadota/lazytodo/internal/wal"
 )
 
 // Update implements tea.Model
@@ -98,6 +99,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.selectedWsIndex > 0 {
 			m.selectedWsIndex--
 		}
+		return m, tea.Batch(m.loadWorkspaces(), clearNotificationAfter(2*time.Second))
+
+	case undoMsg:
+		m.notification = "Undone"
+		m.notificationErr = false
+		// Reload all data
 		return m, tea.Batch(m.loadWorkspaces(), clearNotificationAfter(2*time.Second))
 
 	case tea.KeyMsg:
@@ -219,8 +226,48 @@ func (m Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "o":
 		// Toggle expand/collapse
-		// TODO: Implement toggle
+		if m.activePane == PaneWorkspace && m.SelectedWorkspace() != nil {
+			return m, m.toggleExpand()
+		}
 		return m, nil
+	case ">":
+		// Indent (make child of sibling above)
+		if m.activePane == PaneTodo && m.SelectedTodo() != nil {
+			return m, m.indentTodo()
+		} else if m.activePane == PaneWorkspace && m.SelectedWorkspace() != nil {
+			return m, m.indentWorkspace()
+		}
+		return m, nil
+	case "<":
+		// Outdent (move up one level)
+		if m.activePane == PaneTodo && m.SelectedTodo() != nil {
+			return m, m.outdentTodo()
+		} else if m.activePane == PaneWorkspace && m.SelectedWorkspace() != nil {
+			return m, m.outdentWorkspace()
+		}
+		return m, nil
+	case "ctrl+j":
+		// Move item down
+		if m.activePane == PaneTodo && m.SelectedTodo() != nil {
+			return m, m.moveTodoDown()
+		} else if m.activePane == PaneWorkspace && m.SelectedWorkspace() != nil {
+			return m, m.moveWorkspaceDown()
+		}
+		return m, nil
+	case "ctrl+k":
+		// Move item up
+		if m.activePane == PaneTodo && m.SelectedTodo() != nil {
+			return m, m.moveTodoUp()
+		} else if m.activePane == PaneWorkspace && m.SelectedWorkspace() != nil {
+			return m, m.moveWorkspaceUp()
+		}
+		return m, nil
+
+	// Undo/Redo
+	case "u":
+		return m, m.undo()
+	case "ctrl+r":
+		return m, m.redo()
 
 	// Mode switches
 	case "/":
@@ -541,6 +588,232 @@ func (m Model) deleteWorkspace() tea.Cmd {
 	}
 }
 
+// Indent/Outdent commands
+
+func (m Model) indentTodo() tea.Cmd {
+	return func() tea.Msg {
+		todo := m.SelectedTodo()
+		if todo == nil {
+			return errMsg{domain.ErrNotFound}
+		}
+
+		// Find sibling above to become new parent
+		var newParentID string
+		for _, t := range m.todos {
+			if t.ID == todo.ID {
+				break
+			}
+			if t.Depth == todo.Depth {
+				newParentID = t.ID
+			}
+		}
+
+		if newParentID == "" {
+			return notificationMsg{message: "Cannot indent: no sibling above", isError: true}
+		}
+
+		if err := m.todoRepo.Move(context.Background(), todo.ID, newParentID, ""); err != nil {
+			return errMsg{err}
+		}
+
+		return todoUpdatedMsg{todo: todo}
+	}
+}
+
+func (m Model) outdentTodo() tea.Cmd {
+	return func() tea.Msg {
+		todo := m.SelectedTodo()
+		if todo == nil || todo.ParentID == "" {
+			return notificationMsg{message: "Cannot outdent: no parent", isError: true}
+		}
+
+		// Get grandparent ID
+		parent, err := m.todoRepo.GetByID(context.Background(), todo.ParentID)
+		if err != nil {
+			return errMsg{err}
+		}
+
+		if err := m.todoRepo.Move(context.Background(), todo.ID, parent.ParentID, ""); err != nil {
+			return errMsg{err}
+		}
+
+		return todoUpdatedMsg{todo: todo}
+	}
+}
+
+func (m Model) indentWorkspace() tea.Cmd {
+	return func() tea.Msg {
+		ws := m.SelectedWorkspace()
+		if ws == nil {
+			return errMsg{domain.ErrNotFound}
+		}
+
+		// Find sibling above to become new parent
+		var newParentID string
+		for _, w := range m.workspaces {
+			if w.ID == ws.ID {
+				break
+			}
+			if w.Depth == ws.Depth {
+				newParentID = w.ID
+			}
+		}
+
+		if newParentID == "" {
+			return notificationMsg{message: "Cannot indent: no sibling above", isError: true}
+		}
+
+		if err := m.workspaceRepo.Move(context.Background(), ws.ID, newParentID); err != nil {
+			return errMsg{err}
+		}
+
+		return workspaceUpdatedMsg{workspace: ws}
+	}
+}
+
+func (m Model) outdentWorkspace() tea.Cmd {
+	return func() tea.Msg {
+		ws := m.SelectedWorkspace()
+		if ws == nil || ws.ParentID == "" {
+			return notificationMsg{message: "Cannot outdent: no parent", isError: true}
+		}
+
+		// Get grandparent ID
+		parent, err := m.workspaceRepo.GetByID(context.Background(), ws.ParentID)
+		if err != nil {
+			return errMsg{err}
+		}
+
+		if err := m.workspaceRepo.Move(context.Background(), ws.ID, parent.ParentID); err != nil {
+			return errMsg{err}
+		}
+
+		return workspaceUpdatedMsg{workspace: ws}
+	}
+}
+
+// Reorder commands
+
+func (m Model) moveTodoDown() tea.Cmd {
+	return func() tea.Msg {
+		todo := m.SelectedTodo()
+		if todo == nil {
+			return errMsg{domain.ErrNotFound}
+		}
+
+		newPosition := todo.Position + 1
+		if err := m.todoRepo.Reorder(context.Background(), todo.ID, newPosition); err != nil {
+			return errMsg{err}
+		}
+
+		return todoUpdatedMsg{todo: todo}
+	}
+}
+
+func (m Model) moveTodoUp() tea.Cmd {
+	return func() tea.Msg {
+		todo := m.SelectedTodo()
+		if todo == nil {
+			return errMsg{domain.ErrNotFound}
+		}
+
+		if todo.Position <= 0 {
+			return notificationMsg{message: "Already at top", isError: false}
+		}
+
+		newPosition := todo.Position - 1
+		if err := m.todoRepo.Reorder(context.Background(), todo.ID, newPosition); err != nil {
+			return errMsg{err}
+		}
+
+		return todoUpdatedMsg{todo: todo}
+	}
+}
+
+func (m Model) moveWorkspaceDown() tea.Cmd {
+	return func() tea.Msg {
+		ws := m.SelectedWorkspace()
+		if ws == nil {
+			return errMsg{domain.ErrNotFound}
+		}
+
+		newPosition := ws.Position + 1
+		if err := m.workspaceRepo.Reorder(context.Background(), ws.ID, newPosition); err != nil {
+			return errMsg{err}
+		}
+
+		return workspaceUpdatedMsg{workspace: ws}
+	}
+}
+
+func (m Model) moveWorkspaceUp() tea.Cmd {
+	return func() tea.Msg {
+		ws := m.SelectedWorkspace()
+		if ws == nil {
+			return errMsg{domain.ErrNotFound}
+		}
+
+		if ws.Position <= 0 {
+			return notificationMsg{message: "Already at top", isError: false}
+		}
+
+		newPosition := ws.Position - 1
+		if err := m.workspaceRepo.Reorder(context.Background(), ws.ID, newPosition); err != nil {
+			return errMsg{err}
+		}
+
+		return workspaceUpdatedMsg{workspace: ws}
+	}
+}
+
+// Toggle expand/collapse
+
+func (m Model) toggleExpand() tea.Cmd {
+	return func() tea.Msg {
+		ws := m.SelectedWorkspace()
+		if ws == nil {
+			return errMsg{domain.ErrNotFound}
+		}
+
+		ws.IsExpanded = !ws.IsExpanded
+		if err := m.workspaceRepo.Update(context.Background(), ws); err != nil {
+			return errMsg{err}
+		}
+
+		return workspaceUpdatedMsg{workspace: ws}
+	}
+}
+
+// Undo/Redo commands
+
+func (m Model) undo() tea.Cmd {
+	return func() tea.Msg {
+		ops, err := m.wal.GetUndoOperations(1)
+		if err != nil {
+			return errMsg{err}
+		}
+
+		if len(ops) == 0 {
+			return notificationMsg{message: "Nothing to undo", isError: false}
+		}
+
+		op := ops[0]
+		if err := m.wal.MarkUndone(op.ID); err != nil {
+			return errMsg{err}
+		}
+
+		return undoMsg{operation: op}
+	}
+}
+
+func (m Model) redo() tea.Cmd {
+	return func() tea.Msg {
+		// For redo, we'd need to track undone operations
+		// For now, just show a message
+		return notificationMsg{message: "Redo not yet implemented", isError: false}
+	}
+}
+
 // Message types for CRUD operations
 type todoCreatedMsg struct{ todo *domain.Todo }
 type todoUpdatedMsg struct{ todo *domain.Todo }
@@ -548,3 +821,4 @@ type todoDeletedMsg struct{ id string }
 type workspaceCreatedMsg struct{ workspace *domain.Workspace }
 type workspaceUpdatedMsg struct{ workspace *domain.Workspace }
 type workspaceDeletedMsg struct{ id string }
+type undoMsg struct{ operation *wal.Operation }

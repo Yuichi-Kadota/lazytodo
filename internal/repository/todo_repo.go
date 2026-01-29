@@ -329,6 +329,36 @@ func (r *TodoRepository) GetCompletedBefore(ctx context.Context, before time.Tim
 	return scanTodos(rows)
 }
 
+// CheckAndRepairIntegrity verifies and repairs closure table integrity
+func (r *TodoRepository) CheckAndRepairIntegrity(ctx context.Context) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Fix missing self-references
+	_, err = tx.ExecContext(ctx, `
+		INSERT OR IGNORE INTO todo_closure (ancestor_id, descendant_id, depth)
+		SELECT id, id, 0 FROM todos WHERE deleted_at IS NULL
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to fix missing self-references: %w", err)
+	}
+
+	// Remove orphaned closure entries (entries referencing deleted todos)
+	_, err = tx.ExecContext(ctx, `
+		DELETE FROM todo_closure
+		WHERE ancestor_id NOT IN (SELECT id FROM todos WHERE deleted_at IS NULL)
+		   OR descendant_id NOT IN (SELECT id FROM todos WHERE deleted_at IS NULL)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to remove orphaned closure entries: %w", err)
+	}
+
+	return tx.Commit()
+}
+
 // Helper functions
 
 func formatNullableTime(t *time.Time) interface{} {

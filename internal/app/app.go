@@ -8,6 +8,7 @@ import (
 	"github.com/yuichikadota/lazytodo/internal/domain"
 	"github.com/yuichikadota/lazytodo/internal/input"
 	"github.com/yuichikadota/lazytodo/internal/repository"
+	"github.com/yuichikadota/lazytodo/internal/wal"
 )
 
 // Pane represents which pane is active
@@ -47,6 +48,7 @@ type Model struct {
 	db            *repository.DB
 	workspaceRepo *repository.WorkspaceRepository
 	todoRepo      *repository.TodoRepository
+	wal           *wal.WAL
 
 	// Pending delete (for dd confirmation)
 	pendingDelete bool
@@ -88,6 +90,18 @@ func New(cfg Config) Model {
 	m.db = db
 	m.workspaceRepo = repository.NewWorkspaceRepository(db)
 	m.todoRepo = repository.NewTodoRepository(db)
+	m.wal = wal.New(db.DB, wal.Config{})
+
+	// Run integrity checks
+	ctx := context.Background()
+	if err := m.workspaceRepo.CheckAndRepairIntegrity(ctx); err != nil {
+		m.err = err
+		return m
+	}
+	if err := m.todoRepo.CheckAndRepairIntegrity(ctx); err != nil {
+		m.err = err
+		return m
+	}
 
 	return m
 }
