@@ -140,6 +140,16 @@ func (m TodoPaneModel) renderTodoItem(todo *domain.Todo, selected bool, width in
 		}
 	}
 
+	// Tags
+	tagsStr := ""
+	tags := todo.ExtractTags()
+	if len(tags) > 0 {
+		tagStyle := lipgloss.NewStyle().Foreground(ColorPrimary)
+		for _, tag := range tags {
+			tagsStr += tagStyle.Render(" @"+tag)
+		}
+	}
+
 	// Build line
 	prefix := " "
 	if selected && m.IsActive {
@@ -150,12 +160,12 @@ func (m TodoPaneModel) renderTodoItem(todo *domain.Todo, selected bool, width in
 	desc := todo.Description
 
 	// Truncate if too long
-	maxDescLen := width - len(indent) - len(treeGuide) - len(dueDateStr) - 6
+	maxDescLen := width - len(indent) - len(treeGuide) - len(dueDateStr) - len(tagsStr) - 6
 	if len(desc) > maxDescLen && maxDescLen > 3 {
 		desc = desc[:maxDescLen-3] + "..."
 	}
 
-	line := fmt.Sprintf("%s%s%s%s %s%s", prefix, indent, treeGuide, iconRendered, desc, dueDateStr)
+	line := fmt.Sprintf("%s%s%s%s %s%s%s", prefix, indent, treeGuide, iconRendered, desc, tagsStr, dueDateStr)
 
 	// Apply style
 	if selected && m.IsActive {

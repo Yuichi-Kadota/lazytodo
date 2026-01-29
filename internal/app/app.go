@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -39,6 +40,10 @@ type Model struct {
 	inputBuffer string
 	inputPrompt string
 	inputAction string // "add", "add_child", "edit"
+
+	// Search state
+	searchResults []*domain.Todo
+	isSearching   bool
 
 	// Notification
 	notification    string
@@ -102,6 +107,9 @@ func New(cfg Config) Model {
 		m.err = err
 		return m
 	}
+
+	// Auto-archive completed todos older than 7 days
+	_, _ = m.todoRepo.AutoArchive(ctx, 7*24*time.Hour)
 
 	return m
 }

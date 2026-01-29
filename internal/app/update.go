@@ -107,6 +107,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Reload all data
 		return m, tea.Batch(m.loadWorkspaces(), clearNotificationAfter(2*time.Second))
 
+	case searchResultsMsg:
+		m.searchResults = msg.todos
+		m.todos = msg.todos
+		m.selectedTodoIndex = 0
+		return m, nil
+
+	case todosSortedMsg:
+		m.todos = msg.todos
+		m.selectedTodoIndex = 0
+		m.notification = "Sorted by " + msg.sortBy
+		m.notificationErr = false
+		return m, clearNotificationAfter(2 * time.Second)
+
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
 	}
@@ -352,21 +365,46 @@ func (m Model) handleSearchMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = input.ModeNormal
 		m.inputBuffer = ""
 		m.inputPrompt = ""
-		return m, nil
+		m.isSearching = false
+		m.searchResults = nil
+		// Restore original todos
+		return m, m.loadTodos()
 	case "enter":
-		// Execute search
-		// TODO: Implement search
+		// Confirm search and stay on results
 		m.mode = input.ModeNormal
+		m.inputPrompt = ""
+		if len(m.searchResults) > 0 {
+			m.todos = m.searchResults
+			m.selectedTodoIndex = 0
+		}
+		m.isSearching = false
 		return m, nil
 	case "backspace":
 		if len(m.inputBuffer) > 0 {
 			m.inputBuffer = m.inputBuffer[:len(m.inputBuffer)-1]
+		}
+		// Trigger incremental search
+		if m.inputBuffer != "" {
+			return m, m.searchTodos(m.inputBuffer)
+		}
+		return m, nil
+	case "j", "down":
+		// Navigate search results
+		if m.selectedTodoIndex < len(m.searchResults)-1 {
+			m.selectedTodoIndex++
+		}
+		return m, nil
+	case "k", "up":
+		if m.selectedTodoIndex > 0 {
+			m.selectedTodoIndex--
 		}
 		return m, nil
 	default:
 		// Add character to buffer
 		if len(msg.String()) == 1 {
 			m.inputBuffer += msg.String()
+			// Trigger incremental search
+			return m, m.searchTodos(m.inputBuffer)
 		}
 		return m, nil
 	}
@@ -379,25 +417,21 @@ func (m Model) handleSortMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = input.ModeNormal
 		return m, nil
 	case "n":
-		// Sort by name
-		// TODO: Implement sort
+		// Sort by name (description)
 		m.mode = input.ModeNormal
-		return m, nil
+		return m, m.sortTodos("name")
 	case "d":
 		// Sort by date
-		// TODO: Implement sort
 		m.mode = input.ModeNormal
-		return m, nil
+		return m, m.sortTodos("date")
 	case "u":
 		// Sort by urgency
-		// TODO: Implement sort
 		m.mode = input.ModeNormal
-		return m, nil
+		return m, m.sortTodos("urgency")
 	case "s":
 		// Sort by status
-		// TODO: Implement sort
 		m.mode = input.ModeNormal
-		return m, nil
+		return m, m.sortTodos("status")
 	}
 
 	return m, nil
@@ -814,6 +848,89 @@ func (m Model) redo() tea.Cmd {
 	}
 }
 
+// Search and sort commands
+
+func (m Model) searchTodos(query string) tea.Cmd {
+	return func() tea.Msg {
+		if query == "" {
+			return searchResultsMsg{todos: nil}
+		}
+
+		todos, err := m.todoRepo.Search(context.Background(), query, false)
+		if err != nil {
+			return errMsg{err}
+		}
+
+		return searchResultsMsg{todos: todos}
+	}
+}
+
+func (m Model) sortTodos(sortBy string) tea.Cmd {
+	return func() tea.Msg {
+		if len(m.todos) == 0 {
+			return todosSortedMsg{todos: m.todos, sortBy: sortBy}
+		}
+
+		// Create a copy to sort
+		sorted := make([]*domain.Todo, len(m.todos))
+		copy(sorted, m.todos)
+
+		switch sortBy {
+		case "name":
+			sortTodosByName(sorted)
+		case "date":
+			sortTodosByDate(sorted)
+		case "urgency":
+			sortTodosByUrgency(sorted)
+		case "status":
+			sortTodosByStatus(sorted)
+		}
+
+		return todosSortedMsg{todos: sorted, sortBy: sortBy}
+	}
+}
+
+func sortTodosByName(todos []*domain.Todo) {
+	for i := 0; i < len(todos)-1; i++ {
+		for j := i + 1; j < len(todos); j++ {
+			if todos[i].Description > todos[j].Description {
+				todos[i], todos[j] = todos[j], todos[i]
+			}
+		}
+	}
+}
+
+func sortTodosByDate(todos []*domain.Todo) {
+	for i := 0; i < len(todos)-1; i++ {
+		for j := i + 1; j < len(todos); j++ {
+			if todos[i].CreatedAt.After(todos[j].CreatedAt) {
+				todos[i], todos[j] = todos[j], todos[i]
+			}
+		}
+	}
+}
+
+func sortTodosByUrgency(todos []*domain.Todo) {
+	for i := 0; i < len(todos)-1; i++ {
+		for j := i + 1; j < len(todos); j++ {
+			if todos[i].Urgency < todos[j].Urgency {
+				todos[i], todos[j] = todos[j], todos[i]
+			}
+		}
+	}
+}
+
+func sortTodosByStatus(todos []*domain.Todo) {
+	for i := 0; i < len(todos)-1; i++ {
+		for j := i + 1; j < len(todos); j++ {
+			// Pending before completed
+			if todos[i].Status > todos[j].Status {
+				todos[i], todos[j] = todos[j], todos[i]
+			}
+		}
+	}
+}
+
 // Message types for CRUD operations
 type todoCreatedMsg struct{ todo *domain.Todo }
 type todoUpdatedMsg struct{ todo *domain.Todo }
@@ -822,3 +939,8 @@ type workspaceCreatedMsg struct{ workspace *domain.Workspace }
 type workspaceUpdatedMsg struct{ workspace *domain.Workspace }
 type workspaceDeletedMsg struct{ id string }
 type undoMsg struct{ operation *wal.Operation }
+type searchResultsMsg struct{ todos []*domain.Todo }
+type todosSortedMsg struct {
+	todos  []*domain.Todo
+	sortBy string
+}

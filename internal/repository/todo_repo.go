@@ -329,6 +329,27 @@ func (r *TodoRepository) GetCompletedBefore(ctx context.Context, before time.Tim
 	return scanTodos(rows)
 }
 
+// AutoArchive marks completed todos older than the specified duration as archived
+func (r *TodoRepository) AutoArchive(ctx context.Context, olderThan time.Duration) (int, error) {
+	cutoff := time.Now().Add(-olderThan).Format(time.RFC3339)
+
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE todos
+		SET is_archived = 1, updated_at = ?
+		WHERE status = 'completed'
+			AND completed_at IS NOT NULL
+			AND completed_at < ?
+			AND is_archived = 0
+			AND deleted_at IS NULL
+	`, time.Now().Format(time.RFC3339), cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("failed to auto-archive todos: %w", err)
+	}
+
+	affected, _ := result.RowsAffected()
+	return int(affected), nil
+}
+
 // CheckAndRepairIntegrity verifies and repairs closure table integrity
 func (r *TodoRepository) CheckAndRepairIntegrity(ctx context.Context) error {
 	tx, err := r.db.BeginTx(ctx, nil)
