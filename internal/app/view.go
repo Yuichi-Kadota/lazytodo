@@ -21,6 +21,11 @@ func (m Model) View() string {
 		return "Loading..."
 	}
 
+	// Show help screen if active
+	if m.showHelp {
+		return m.renderHelp()
+	}
+
 	// Check for welcome screen
 	if !m.HasWorkspaces() {
 		return m.renderWelcome()
@@ -185,4 +190,75 @@ func (m Model) renderStatusBar() string {
 	}
 
 	return statusBar.Render()
+}
+
+// renderHelp renders the help screen
+func (m Model) renderHelp() string {
+	helpContent := `
+ lazytodo - Keyboard Shortcuts
+
+ NAVIGATION
+   j/k        Move down/up
+   h/l        Switch pane left/right
+   Tab        Switch pane
+   g/G        Jump to first/last item
+   Ctrl+j/k   Reorder item down/up
+
+ EDITING
+   a          Add new item
+   A          Add child item
+   i          Edit current item
+   dd         Delete current item
+   Enter/Space Toggle todo status
+   o          Toggle expand/collapse
+
+ TREE OPERATIONS
+   >          Indent (make child)
+   <          Outdent (move up level)
+
+ MODES
+   /          Search mode
+   s          Sort mode
+   Esc        Return to normal mode
+
+ SORT OPTIONS (in sort mode)
+   n          Sort by name
+   d          Sort by date
+   u          Sort by urgency
+   s          Sort by status
+
+ OTHER
+   ?          Toggle this help
+   u          Undo
+   Ctrl+r     Redo
+   q          Quit
+
+ Press ? to close this help
+`
+
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ui.ColorPrimary).
+		Padding(1, 2).
+		Align(lipgloss.Left)
+
+	content := box.Render(helpContent)
+
+	// Center on screen
+	boxWidth := lipgloss.Width(content)
+	boxHeight := lipgloss.Height(content)
+
+	horizontalPad := (m.width - boxWidth) / 2
+	verticalPad := (m.height - boxHeight) / 2
+
+	if horizontalPad < 0 {
+		horizontalPad = 0
+	}
+	if verticalPad < 0 {
+		verticalPad = 0
+	}
+
+	return lipgloss.NewStyle().
+		Padding(verticalPad, horizontalPad).
+		Render(content)
 }

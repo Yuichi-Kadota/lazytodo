@@ -45,6 +45,9 @@ type Model struct {
 	searchResults []*domain.Todo
 	isSearching   bool
 
+	// Help screen
+	showHelp bool
+
 	// Notification
 	notification    string
 	notificationErr bool

@@ -292,8 +292,8 @@ func (m Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = input.ModeSort
 		return m, nil
 	case "?":
-		// Show help
-		// TODO: Implement help
+		// Toggle help screen
+		m.showHelp = !m.showHelp
 		return m, nil
 	}
 
