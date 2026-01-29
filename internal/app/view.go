@@ -4,146 +4,185 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/yuichikadota/lazytodo/internal/input"
+	"github.com/yuichikadota/lazytodo/internal/ui"
 )
+
+var styles = ui.NewStyles()
 
 // View implements tea.Model
 func (m Model) View() string {
 	if m.err != nil {
-		return fmt.Sprintf("Error: %v\n\nPress 'q' to quit.", m.err)
+		return m.renderError()
 	}
 
 	if m.width == 0 {
 		return "Loading..."
 	}
 
+	// Check for welcome screen
+	if !m.HasWorkspaces() {
+		return m.renderWelcome()
+	}
+
 	var b strings.Builder
 
-	// Main content area
-	contentHeight := m.height - 2 // Reserve 2 lines for status bar and input
+	// Calculate dimensions
+	contentHeight := m.height - 2 // Reserve for status bar
+	if m.mode == input.ModeInsert || m.mode == input.ModeSearch {
+		contentHeight-- // Reserve for input bar
+	}
 
-	// For now, simple view - will be replaced with proper 2-pane layout
-	b.WriteString(m.renderContent(contentHeight))
+	// Render two panes
+	panes := m.renderPanes(contentHeight)
+	b.WriteString(panes)
 	b.WriteString("\n")
 
 	// Input bar (if in insert/search mode)
 	if m.mode == input.ModeInsert || m.mode == input.ModeSearch {
-		b.WriteString(m.renderInputBar())
-	} else {
+		inputBar := m.renderInputBar()
+		b.WriteString(inputBar)
 		b.WriteString("\n")
 	}
 
 	// Status bar
-	b.WriteString(m.renderStatusBar())
+	statusBar := m.renderStatusBar()
+	b.WriteString(statusBar)
 
 	return b.String()
 }
 
-// renderContent renders the main content area
-func (m Model) renderContent(height int) string {
-	var b strings.Builder
+// renderError renders the error screen
+func (m Model) renderError() string {
+	errorStyle := lipgloss.NewStyle().
+		Foreground(ui.ColorError).
+		Bold(true).
+		Padding(2, 4)
 
-	// Welcome screen if no workspaces
-	if !m.HasWorkspaces() {
-		return m.renderWelcome(height)
-	}
-
-	// Simple text-based view for now
-	// Will be replaced with proper 2-pane layout in Task #7
-	b.WriteString("Workspaces:\n")
-	for i, ws := range m.workspaces {
-		prefix := "  "
-		if i == m.selectedWsIndex && m.activePane == PaneWorkspace {
-			prefix = "> "
-		}
-		b.WriteString(fmt.Sprintf("%s%s\n", prefix, ws.Name))
-	}
-
-	b.WriteString("\nTodos:\n")
-	if m.SelectedWorkspace() != nil {
-		if len(m.todos) == 0 {
-			b.WriteString("  No todos yet. Press 'a' to add one.\n")
-		} else {
-			for i, todo := range m.todos {
-				prefix := "  "
-				if i == m.selectedTodoIndex && m.activePane == PaneTodo {
-					prefix = "> "
-				}
-				status := "[ ]"
-				if todo.IsCompleted() {
-					status = "[✓]"
-				}
-				b.WriteString(fmt.Sprintf("%s%s %s\n", prefix, status, todo.Description))
-			}
-		}
-	}
-
-	return b.String()
+	return errorStyle.Render(fmt.Sprintf("Error: %v\n\nPress 'q' to quit.", m.err))
 }
 
 // renderWelcome renders the welcome screen
-func (m Model) renderWelcome(height int) string {
-	var b strings.Builder
+func (m Model) renderWelcome() string {
+	// Center box
+	boxWidth := 40
+	boxHeight := 10
 
-	// Center the welcome message
-	padding := (height - 6) / 2
-	for i := 0; i < padding; i++ {
-		b.WriteString("\n")
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ui.ColorPrimary).
+		Padding(2, 4).
+		Width(boxWidth).
+		Align(lipgloss.Center)
+
+	icon := lipgloss.NewStyle().
+		Foreground(ui.ColorPrimary).
+		Bold(true).
+		Render("")
+
+	title := lipgloss.NewStyle().
+		Foreground(ui.ColorForeground).
+		Bold(true).
+		Render("Welcome to lazytodo!")
+
+	hint := lipgloss.NewStyle().
+		Foreground(ui.ColorMuted).
+		Render("Press 'A' to create your first\nworkspace, or '?' for help")
+
+	content := fmt.Sprintf("%s\n\n%s\n\n%s", icon, title, hint)
+	boxContent := box.Render(content)
+
+	// Center on screen
+	horizontalPad := (m.width - boxWidth) / 2
+	verticalPad := (m.height - boxHeight) / 2
+
+	if horizontalPad < 0 {
+		horizontalPad = 0
+	}
+	if verticalPad < 0 {
+		verticalPad = 0
 	}
 
-	// Welcome message
-	lines := []string{
-		"",
-		"       Welcome to lazytodo!",
-		"",
-		"  Press 'A' to create your first",
-		"  workspace, or '?' for help",
-		"",
+	return lipgloss.NewStyle().
+		Padding(verticalPad, horizontalPad).
+		Render(boxContent) + "\n" + m.renderStatusBar()
+}
+
+// renderPanes renders the two-pane layout
+func (m Model) renderPanes(height int) string {
+	// Calculate widths (30:70 ratio)
+	wsWidth := int(float64(m.width) * ui.WorkspacePaneRatio)
+	todoWidth := m.width - wsWidth
+
+	// Ensure minimum widths
+	if wsWidth < ui.MinPaneWidth {
+		wsWidth = ui.MinPaneWidth
+		todoWidth = m.width - wsWidth
 	}
 
-	for _, line := range lines {
-		b.WriteString(fmt.Sprintf("%s\n", line))
+	// Render workspace pane
+	wsPane := ui.WorkspacePaneModel{
+		Workspaces:    m.workspaces,
+		SelectedIndex: m.selectedWsIndex,
+		IsActive:      m.activePane == PaneWorkspace,
+		Width:         wsWidth,
+		Height:        height,
+		Styles:        styles,
 	}
 
-	return b.String()
+	// Render todo pane
+	todoPane := ui.TodoPaneModel{
+		Todos:         m.todos,
+		SelectedIndex: m.selectedTodoIndex,
+		IsActive:      m.activePane == PaneTodo,
+		Width:         todoWidth,
+		Height:        height,
+		WorkspaceName: func() string {
+			if ws := m.SelectedWorkspace(); ws != nil {
+				return ws.Name
+			}
+			return ""
+		}(),
+		Styles: styles,
+	}
+
+	// Join horizontally
+	return lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		wsPane.Render(),
+		todoPane.Render(),
+	)
 }
 
 // renderInputBar renders the input bar
 func (m Model) renderInputBar() string {
-	return fmt.Sprintf("%s%s_", m.inputPrompt, m.inputBuffer)
+	inputBar := ui.InputBarModel{
+		Prompt: m.inputPrompt,
+		Value:  m.inputBuffer,
+		Width:  m.width,
+		Styles: styles,
+	}
+
+	return inputBar.Render()
 }
 
 // renderStatusBar renders the status bar
 func (m Model) renderStatusBar() string {
-	// Mode indicator
-	mode := fmt.Sprintf("[%s]", m.mode.String())
-
-	// Item count
-	var itemCount string
-	if m.SelectedWorkspace() != nil {
-		itemCount = fmt.Sprintf("%d todos", len(m.todos))
+	statusBar := ui.StatusBarModel{
+		Mode:          m.mode.String(),
+		TodoCount:     len(m.todos),
+		WorkspaceName: func() string {
+			if ws := m.SelectedWorkspace(); ws != nil {
+				return ws.Name
+			}
+			return ""
+		}(),
+		Notification: m.notification,
+		IsError:      m.notificationErr,
+		Width:        m.width,
+		Styles:       styles,
 	}
 
-	// Workspace name
-	var wsName string
-	if ws := m.SelectedWorkspace(); ws != nil {
-		wsName = ws.Name
-	}
-
-	// Notification
-	notification := m.notification
-
-	// Build status bar
-	parts := []string{mode}
-	if itemCount != "" {
-		parts = append(parts, itemCount)
-	}
-	if wsName != "" {
-		parts = append(parts, wsName)
-	}
-	if notification != "" {
-		parts = append(parts, notification)
-	}
-
-	return strings.Join(parts, " | ")
+	return statusBar.Render()
 }
