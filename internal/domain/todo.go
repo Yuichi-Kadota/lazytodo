@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"regexp"
+	"time"
+)
 
 // Status represents the todo status
 type Status string
@@ -68,4 +71,29 @@ func (t *Todo) IsDueToday() bool {
 	return t.DueDate.Year() == now.Year() &&
 		t.DueDate.Month() == now.Month() &&
 		t.DueDate.Day() == now.Day()
+}
+
+// tagRegex matches @tag patterns
+var tagRegex = regexp.MustCompile(`@(\w+)`)
+
+// ExtractTags returns all @tags from the description
+func (t *Todo) ExtractTags() []string {
+	matches := tagRegex.FindAllStringSubmatch(t.Description, -1)
+	tags := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if len(match) > 1 {
+			tags = append(tags, match[1])
+		}
+	}
+	return tags
+}
+
+// HasTag returns true if the todo has the specified tag
+func (t *Todo) HasTag(tag string) bool {
+	for _, t := range t.ExtractTags() {
+		if t == tag {
+			return true
+		}
+	}
+	return false
 }

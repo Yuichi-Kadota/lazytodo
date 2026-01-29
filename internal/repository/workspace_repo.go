@@ -329,6 +329,36 @@ func (r *WorkspaceRepository) Reorder(ctx context.Context, id string, newPositio
 	return err
 }
 
+// CheckAndRepairIntegrity verifies and repairs closure table integrity
+func (r *WorkspaceRepository) CheckAndRepairIntegrity(ctx context.Context) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Fix missing self-references
+	_, err = tx.ExecContext(ctx, `
+		INSERT OR IGNORE INTO workspace_closure (ancestor_id, descendant_id, depth)
+		SELECT id, id, 0 FROM workspaces WHERE deleted_at IS NULL
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to fix missing self-references: %w", err)
+	}
+
+	// Remove orphaned closure entries (entries referencing deleted workspaces)
+	_, err = tx.ExecContext(ctx, `
+		DELETE FROM workspace_closure
+		WHERE ancestor_id NOT IN (SELECT id FROM workspaces WHERE deleted_at IS NULL)
+		   OR descendant_id NOT IN (SELECT id FROM workspaces WHERE deleted_at IS NULL)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to remove orphaned closure entries: %w", err)
+	}
+
+	return tx.Commit()
+}
+
 // GetOrCreateArchive ensures the _archive workspace exists
 func (r *WorkspaceRepository) GetOrCreateArchive(ctx context.Context) (*domain.Workspace, error) {
 	// Try to get existing _archive workspace
