@@ -52,15 +52,14 @@ func (m TodoPaneModel) Render() string {
 	} else {
 		lineCount := 0
 
-		// Show add input at top if adding
-		if m.IsAdding {
+		// If no todos but adding, show add input
+		if len(m.Todos) == 0 && m.IsAdding {
 			addLine := m.renderAddInput(contentWidth)
 			content.WriteString(addLine)
-			content.WriteString("\n")
 			lineCount++
 		}
 
-		// Render todos (all together, maintaining original order)
+		// Render todos with add input after selected item
 		for i, todo := range m.Todos {
 			if lineCount >= contentHeight-1 {
 				content.WriteString("...")
@@ -74,10 +73,19 @@ func (m TodoPaneModel) Render() string {
 				line = m.renderTodoItem(todo, i == m.SelectedIndex, contentWidth)
 			}
 			content.WriteString(line)
-			if i < len(m.Todos)-1 {
+			lineCount++
+
+			// Show add input after selected item
+			if m.IsAdding && i == m.SelectedIndex {
+				content.WriteString("\n")
+				addLine := m.renderAddInput(contentWidth)
+				content.WriteString(addLine)
+				lineCount++
+			}
+
+			if i < len(m.Todos)-1 || (m.IsAdding && i != m.SelectedIndex) {
 				content.WriteString("\n")
 			}
-			lineCount++
 		}
 	}
 
@@ -92,57 +100,48 @@ func (m TodoPaneModel) Render() string {
 func (m TodoPaneModel) renderTodoItem(todo *domain.Todo, selected bool, width int) string {
 	// Icon based on status and urgency
 	var icon string
-	var iconStyle lipgloss.Style
 
 	if todo.IsCompleted() {
 		icon = IconTodoDone
-		iconStyle = lipgloss.NewStyle().Foreground(ColorTodoComplete)
 	} else if todo.Urgency >= domain.UrgencyHigh {
 		icon = IconTodoUrgent
-		iconStyle = m.Styles.TodoUrgent
 	} else {
 		icon = IconTodo
-		iconStyle = m.Styles.TodoPending
 	}
 
 	// Indentation for nested todos
 	indent := strings.Repeat("  ", todo.Depth)
 	treeGuide := ""
 	if todo.Depth > 0 {
-		treeGuide = m.Styles.TreeGuide.Render("├─ ")
+		treeGuide = "├─ "
 	}
 
-	// Due date
-	dueDateStr := ""
-	if todo.DueDate != nil {
-		if todo.IsOverdue() {
-			dueDateStr = lipgloss.NewStyle().Foreground(ColorOverdue).Render(" [Overdue]")
-		} else if todo.IsDueToday() {
-			dueDateStr = lipgloss.NewStyle().Foreground(ColorDueToday).Render(" [Today]")
-		} else {
-			dueDateStr = lipgloss.NewStyle().Foreground(ColorMuted).
-				Render(fmt.Sprintf(" [%s]", todo.DueDate.Format("Jan 2")))
-		}
-	}
-
-	// Tags
-	tagsStr := ""
-	tags := todo.ExtractTags()
-	if len(tags) > 0 {
-		tagStyle := lipgloss.NewStyle().Foreground(ColorPrimary)
-		for _, tag := range tags {
-			tagsStr += tagStyle.Render(" @"+tag)
-		}
-	}
-
-	// Build line
+	// Build line without styles first
 	prefix := " "
 	if selected && m.IsActive {
 		prefix = ">"
 	}
 
-	iconRendered := iconStyle.Render(icon)
 	desc := todo.Description
+
+	// Due date (plain text)
+	dueDateStr := ""
+	if todo.DueDate != nil {
+		if todo.IsOverdue() {
+			dueDateStr = " [Overdue]"
+		} else if todo.IsDueToday() {
+			dueDateStr = " [Today]"
+		} else {
+			dueDateStr = fmt.Sprintf(" [%s]", todo.DueDate.Format("Jan 2"))
+		}
+	}
+
+	// Tags (plain text)
+	tagsStr := ""
+	tags := todo.ExtractTags()
+	for _, tag := range tags {
+		tagsStr += " @" + tag
+	}
 
 	// Truncate if too long
 	maxDescLen := width - len(indent) - len(treeGuide) - len(dueDateStr) - len(tagsStr) - 6
@@ -150,9 +149,9 @@ func (m TodoPaneModel) renderTodoItem(todo *domain.Todo, selected bool, width in
 		desc = desc[:maxDescLen-3] + "..."
 	}
 
-	line := fmt.Sprintf("%s%s%s%s %s%s%s", prefix, indent, treeGuide, iconRendered, desc, tagsStr, dueDateStr)
+	line := fmt.Sprintf("%s%s%s%s %s%s%s", prefix, indent, treeGuide, icon, desc, tagsStr, dueDateStr)
 
-	// Apply style
+	// Apply single style at the end
 	if selected && m.IsActive {
 		return m.Styles.SelectedItem.Render(line)
 	}
@@ -167,33 +166,29 @@ func (m TodoPaneModel) renderTodoItem(todo *domain.Todo, selected bool, width in
 // renderEditingItem renders a todo item in editing mode
 func (m TodoPaneModel) renderEditingItem(todo *domain.Todo, width int) string {
 	icon := IconTodo
-	iconStyle := m.Styles.TodoPending
-	iconRendered := iconStyle.Render(icon)
 
 	// Indentation
 	indent := strings.Repeat("  ", todo.Depth)
 	treeGuide := ""
 	if todo.Depth > 0 {
-		treeGuide = m.Styles.TreeGuide.Render("├─ ")
+		treeGuide = "├─ "
 	}
 
 	// Show edit buffer with cursor
 	editText := m.EditBuffer + "_"
 
-	line := fmt.Sprintf(">%s%s%s %s", indent, treeGuide, iconRendered, editText)
+	line := fmt.Sprintf(">%s%s%s %s", indent, treeGuide, icon, editText)
 	return m.Styles.EditingItem.Render(line)
 }
 
 // renderAddInput renders the add input line
 func (m TodoPaneModel) renderAddInput(width int) string {
 	icon := IconTodo
-	iconStyle := m.Styles.TodoPending
-	iconRendered := iconStyle.Render(icon)
 
 	// Show edit buffer with cursor
 	editText := m.EditBuffer + "_"
 
-	line := fmt.Sprintf(">%s %s", iconRendered, editText)
+	line := fmt.Sprintf(">%s %s", icon, editText)
 	return m.Styles.EditingItem.Render(line)
 }
 

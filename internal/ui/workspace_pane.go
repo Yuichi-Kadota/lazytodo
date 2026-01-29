@@ -48,18 +48,18 @@ func (m WorkspacePaneModel) Render() string {
 		empty := m.Styles.EmptyState.Width(contentWidth).Render("No workspaces\nPress 'a' to create")
 		content.WriteString(empty)
 	} else {
-		// Show add input at top if adding
-		if m.IsAdding {
+		lineCount := 0
+
+		// If no workspaces but adding, show add input
+		if len(m.Workspaces) == 0 && m.IsAdding {
 			addLine := m.renderAddInput(contentWidth)
 			content.WriteString(addLine)
-			if len(m.Workspaces) > 0 {
-				content.WriteString("\n")
-			}
+			lineCount++
 		}
 
-		// Render workspaces
+		// Render workspaces with add input after selected item
 		for i, ws := range m.Workspaces {
-			if i >= contentHeight-1 {
+			if lineCount >= contentHeight-1 {
 				content.WriteString("...")
 				break
 			}
@@ -71,7 +71,17 @@ func (m WorkspacePaneModel) Render() string {
 				line = m.renderWorkspaceItem(ws, i == m.SelectedIndex, contentWidth)
 			}
 			content.WriteString(line)
-			if i < len(m.Workspaces)-1 {
+			lineCount++
+
+			// Show add input after selected item
+			if m.IsAdding && i == m.SelectedIndex {
+				content.WriteString("\n")
+				addLine := m.renderAddInput(contentWidth)
+				content.WriteString(addLine)
+				lineCount++
+			}
+
+			if i < len(m.Workspaces)-1 || (m.IsAdding && i != m.SelectedIndex) {
 				content.WriteString("\n")
 			}
 		}
@@ -95,32 +105,21 @@ func (m WorkspacePaneModel) renderWorkspaceItem(ws *domain.Workspace, selected b
 		icon = IconArchive
 	}
 
-	// Color based on depth and type
-	var iconStyle lipgloss.Style
-	if ws.IsSystem() {
-		iconStyle = lipgloss.NewStyle().Foreground(ColorIconArchive)
-	} else if ws.Depth == 0 {
-		iconStyle = m.Styles.WorkspaceRoot
-	} else {
-		iconStyle = m.Styles.WorkspaceChild
-	}
-
 	// Indentation
 	indent := strings.Repeat("  ", ws.Depth)
 
-	// Tree guide
+	// Tree guide (plain text)
 	treeGuide := ""
 	if ws.Depth > 0 {
-		treeGuide = m.Styles.TreeGuide.Render("├─ ")
+		treeGuide = "├─ "
 	}
 
-	// Build line
+	// Build line without styles
 	prefix := " "
 	if selected && m.IsActive {
 		prefix = ">"
 	}
 
-	iconRendered := iconStyle.Render(icon)
 	name := ws.Name
 
 	// Truncate if too long
@@ -129,9 +128,9 @@ func (m WorkspacePaneModel) renderWorkspaceItem(ws *domain.Workspace, selected b
 		name = name[:maxNameLen-3] + "..."
 	}
 
-	line := fmt.Sprintf("%s%s%s%s %s", prefix, indent, treeGuide, iconRendered, name)
+	line := fmt.Sprintf("%s%s%s%s %s", prefix, indent, treeGuide, icon, name)
 
-	// Apply selection style
+	// Apply single style at the end
 	if selected && m.IsActive {
 		return m.Styles.SelectedItem.Render(line)
 	}
@@ -143,35 +142,30 @@ func (m WorkspacePaneModel) renderWorkspaceItem(ws *domain.Workspace, selected b
 func (m WorkspacePaneModel) renderEditingItem(ws *domain.Workspace, width int) string {
 	// Icon
 	icon := IconFolderOpen
-	iconStyle := m.Styles.WorkspaceRoot
 
 	// Indentation
 	indent := strings.Repeat("  ", ws.Depth)
 
-	// Tree guide
+	// Tree guide (plain text)
 	treeGuide := ""
 	if ws.Depth > 0 {
-		treeGuide = m.Styles.TreeGuide.Render("├─ ")
+		treeGuide = "├─ "
 	}
-
-	iconRendered := iconStyle.Render(icon)
 
 	// Show edit buffer with cursor
 	editText := m.EditBuffer + "_"
 
-	line := fmt.Sprintf(">%s%s%s %s", indent, treeGuide, iconRendered, editText)
+	line := fmt.Sprintf(">%s%s%s %s", indent, treeGuide, icon, editText)
 	return m.Styles.EditingItem.Render(line)
 }
 
 // renderAddInput renders the add input line
 func (m WorkspacePaneModel) renderAddInput(width int) string {
 	icon := IconFolderOpen
-	iconStyle := m.Styles.WorkspaceRoot
-	iconRendered := iconStyle.Render(icon)
 
 	// Show edit buffer with cursor
 	editText := m.EditBuffer + "_"
 
-	line := fmt.Sprintf(">%s %s", iconRendered, editText)
+	line := fmt.Sprintf(">%s %s", icon, editText)
 	return m.Styles.EditingItem.Render(line)
 }
