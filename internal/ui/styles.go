@@ -23,6 +23,7 @@ type Styles struct {
 	SelectedItem   lipgloss.Style
 	UnselectedItem lipgloss.Style
 	CompletedItem  lipgloss.Style
+	EditingItem    lipgloss.Style
 
 	// Workspace styles
 	WorkspaceRoot  lipgloss.Style
@@ -85,6 +86,11 @@ func NewStyles() Styles {
 		CompletedItem: lipgloss.NewStyle().
 			Foreground(ColorTodoComplete).
 			Strikethrough(true),
+
+		EditingItem: lipgloss.NewStyle().
+			Background(ColorSelectedBg).
+			Foreground(ColorPrimary).
+			Bold(true),
 
 		WorkspaceRoot: lipgloss.NewStyle().
 			Foreground(ColorFolderRoot),

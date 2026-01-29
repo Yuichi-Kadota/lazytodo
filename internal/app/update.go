@@ -285,11 +285,8 @@ func (m Model) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Mode switches
 	case "/":
 		m.mode = input.ModeSearch
-		m.inputPrompt = "/"
+		m.inputPrompt = "Search: "
 		m.inputBuffer = ""
-		return m, nil
-	case "s":
-		m.mode = input.ModeSort
 		return m, nil
 	case "?":
 		// Toggle help screen

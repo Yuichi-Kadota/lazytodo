@@ -37,9 +37,10 @@ type Model struct {
 	selectedTodoIndex int
 
 	// Input state
-	inputBuffer string
-	inputPrompt string
-	inputAction string // "add", "add_child", "edit"
+	inputBuffer  string
+	inputPrompt  string
+	inputAction  string // "add", "add_child", "edit"
+	editingIndex int    // Index of item being edited (-1 if adding new)
 
 	// Search state
 	searchResults []*domain.Todo

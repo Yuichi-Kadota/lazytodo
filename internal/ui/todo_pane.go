@@ -18,6 +18,11 @@ type TodoPaneModel struct {
 	Height        int
 	WorkspaceName string
 	Styles        Styles
+	// Editing state
+	IsEditing    bool
+	EditingIndex int
+	EditBuffer   string
+	IsAdding     bool
 }
 
 // Render renders the todo pane
@@ -41,55 +46,35 @@ func (m TodoPaneModel) Render() string {
 	content.WriteString(title)
 	content.WriteString("\n")
 
-	if len(m.Todos) == 0 {
+	if len(m.Todos) == 0 && !m.IsAdding {
 		empty := m.Styles.EmptyState.Width(contentWidth).Render("No todos yet.\nPress 'a' to add one.")
 		content.WriteString(empty)
 	} else {
-		// Separate pending and completed
-		var pending, completed []*domain.Todo
-		for _, t := range m.Todos {
-			if t.IsCompleted() {
-				completed = append(completed, t)
-			} else {
-				pending = append(pending, t)
-			}
-		}
-
 		lineCount := 0
 
-		// Render pending todos
-		for i, todo := range pending {
+		// Show add input at top if adding
+		if m.IsAdding {
+			addLine := m.renderAddInput(contentWidth)
+			content.WriteString(addLine)
+			content.WriteString("\n")
+			lineCount++
+		}
+
+		// Render todos (all together, maintaining original order)
+		for i, todo := range m.Todos {
 			if lineCount >= contentHeight-1 {
 				content.WriteString("...")
 				break
 			}
 
-			actualIndex := i
-			line := m.renderTodoItem(todo, actualIndex == m.SelectedIndex, contentWidth)
-			content.WriteString(line)
-			content.WriteString("\n")
-			lineCount++
-		}
-
-		// Separator if both pending and completed exist
-		if len(pending) > 0 && len(completed) > 0 && lineCount < contentHeight-2 {
-			sep := m.Styles.TreeGuide.Render(strings.Repeat("─", contentWidth-2))
-			content.WriteString(sep)
-			content.WriteString("\n")
-			lineCount++
-		}
-
-		// Render completed todos
-		for i, todo := range completed {
-			if lineCount >= contentHeight-1 {
-				content.WriteString("...")
-				break
+			var line string
+			if m.IsEditing && i == m.EditingIndex {
+				line = m.renderEditingItem(todo, contentWidth)
+			} else {
+				line = m.renderTodoItem(todo, i == m.SelectedIndex, contentWidth)
 			}
-
-			actualIndex := len(pending) + i
-			line := m.renderTodoItem(todo, actualIndex == m.SelectedIndex, contentWidth)
 			content.WriteString(line)
-			if i < len(completed)-1 {
+			if i < len(m.Todos)-1 {
 				content.WriteString("\n")
 			}
 			lineCount++
@@ -177,6 +162,39 @@ func (m TodoPaneModel) renderTodoItem(todo *domain.Todo, selected bool, width in
 	}
 
 	return m.Styles.UnselectedItem.Render(line)
+}
+
+// renderEditingItem renders a todo item in editing mode
+func (m TodoPaneModel) renderEditingItem(todo *domain.Todo, width int) string {
+	icon := IconTodo
+	iconStyle := m.Styles.TodoPending
+	iconRendered := iconStyle.Render(icon)
+
+	// Indentation
+	indent := strings.Repeat("  ", todo.Depth)
+	treeGuide := ""
+	if todo.Depth > 0 {
+		treeGuide = m.Styles.TreeGuide.Render("├─ ")
+	}
+
+	// Show edit buffer with cursor
+	editText := m.EditBuffer + "_"
+
+	line := fmt.Sprintf(">%s%s%s %s", indent, treeGuide, iconRendered, editText)
+	return m.Styles.EditingItem.Render(line)
+}
+
+// renderAddInput renders the add input line
+func (m TodoPaneModel) renderAddInput(width int) string {
+	icon := IconTodo
+	iconStyle := m.Styles.TodoPending
+	iconRendered := iconStyle.Render(icon)
+
+	// Show edit buffer with cursor
+	editText := m.EditBuffer + "_"
+
+	line := fmt.Sprintf(">%s %s", iconRendered, editText)
+	return m.Styles.EditingItem.Render(line)
 }
 
 // formatDueDate formats a due date for display

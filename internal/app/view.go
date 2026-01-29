@@ -35,8 +35,8 @@ func (m Model) View() string {
 
 	// Calculate dimensions
 	contentHeight := m.height - 2 // Reserve for status bar
-	if m.mode == input.ModeInsert || m.mode == input.ModeSearch {
-		contentHeight-- // Reserve for input bar
+	if m.mode == input.ModeSearch {
+		contentHeight-- // Reserve for search bar
 	}
 
 	// Render two panes
@@ -44,8 +44,8 @@ func (m Model) View() string {
 	b.WriteString(panes)
 	b.WriteString("\n")
 
-	// Input bar (if in insert/search mode)
-	if m.mode == input.ModeInsert || m.mode == input.ModeSearch {
+	// Search bar (only for search mode)
+	if m.mode == input.ModeSearch {
 		inputBar := m.renderInputBar()
 		b.WriteString(inputBar)
 		b.WriteString("\n")
@@ -126,6 +126,12 @@ func (m Model) renderPanes(height int) string {
 		todoWidth = m.width - wsWidth
 	}
 
+	// Determine editing state
+	isWsEditing := m.mode == input.ModeInsert && m.activePane == PaneWorkspace && m.inputAction == "edit"
+	isWsAdding := m.mode == input.ModeInsert && m.activePane == PaneWorkspace && m.inputAction == "add"
+	isTodoEditing := m.mode == input.ModeInsert && m.activePane == PaneTodo && m.inputAction == "edit"
+	isTodoAdding := m.mode == input.ModeInsert && m.activePane == PaneTodo && (m.inputAction == "add" || m.inputAction == "add_child")
+
 	// Render workspace pane
 	wsPane := ui.WorkspacePaneModel{
 		Workspaces:    m.workspaces,
@@ -134,6 +140,10 @@ func (m Model) renderPanes(height int) string {
 		Width:         wsWidth,
 		Height:        height,
 		Styles:        styles,
+		IsEditing:     isWsEditing,
+		EditingIndex:  m.selectedWsIndex,
+		EditBuffer:    m.inputBuffer,
+		IsAdding:      isWsAdding,
 	}
 
 	// Render todo pane
@@ -149,7 +159,11 @@ func (m Model) renderPanes(height int) string {
 			}
 			return ""
 		}(),
-		Styles: styles,
+		Styles:       styles,
+		IsEditing:    isTodoEditing,
+		EditingIndex: m.selectedTodoIndex,
+		EditBuffer:   m.inputBuffer,
+		IsAdding:     isTodoAdding,
 	}
 
 	// Join horizontally
@@ -202,7 +216,6 @@ func (m Model) renderHelp() string {
    h/l        Switch pane left/right
    Tab        Switch pane
    g/G        Jump to first/last item
-   Ctrl+j/k   Reorder item down/up
 
  EDITING
    a          Add new item
@@ -215,22 +228,15 @@ func (m Model) renderHelp() string {
  TREE OPERATIONS
    >          Indent (make child)
    <          Outdent (move up level)
+   Ctrl+j/k   Move item down/up
 
- MODES
-   /          Search mode
-   s          Sort mode
-   Esc        Return to normal mode
-
- SORT OPTIONS (in sort mode)
-   n          Sort by name
-   d          Sort by date
-   u          Sort by urgency
-   s          Sort by status
+ SEARCH
+   /          Enter search mode
+   Esc        Exit search mode
 
  OTHER
    ?          Toggle this help
    u          Undo
-   Ctrl+r     Redo
    q          Quit
 
  Press ? to close this help

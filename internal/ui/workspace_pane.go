@@ -16,6 +16,11 @@ type WorkspacePaneModel struct {
 	Width         int
 	Height        int
 	Styles        Styles
+	// Editing state
+	IsEditing    bool
+	EditingIndex int
+	EditBuffer   string
+	IsAdding     bool
 }
 
 // Render renders the workspace pane
@@ -39,10 +44,19 @@ func (m WorkspacePaneModel) Render() string {
 	content.WriteString(title)
 	content.WriteString("\n")
 
-	if len(m.Workspaces) == 0 {
-		empty := m.Styles.EmptyState.Width(contentWidth).Render("No workspaces\nPress 'A' to create")
+	if len(m.Workspaces) == 0 && !m.IsAdding {
+		empty := m.Styles.EmptyState.Width(contentWidth).Render("No workspaces\nPress 'a' to create")
 		content.WriteString(empty)
 	} else {
+		// Show add input at top if adding
+		if m.IsAdding {
+			addLine := m.renderAddInput(contentWidth)
+			content.WriteString(addLine)
+			if len(m.Workspaces) > 0 {
+				content.WriteString("\n")
+			}
+		}
+
 		// Render workspaces
 		for i, ws := range m.Workspaces {
 			if i >= contentHeight-1 {
@@ -50,7 +64,12 @@ func (m WorkspacePaneModel) Render() string {
 				break
 			}
 
-			line := m.renderWorkspaceItem(ws, i == m.SelectedIndex, contentWidth)
+			var line string
+			if m.IsEditing && i == m.EditingIndex {
+				line = m.renderEditingItem(ws, contentWidth)
+			} else {
+				line = m.renderWorkspaceItem(ws, i == m.SelectedIndex, contentWidth)
+			}
 			content.WriteString(line)
 			if i < len(m.Workspaces)-1 {
 				content.WriteString("\n")
@@ -118,4 +137,41 @@ func (m WorkspacePaneModel) renderWorkspaceItem(ws *domain.Workspace, selected b
 	}
 
 	return m.Styles.UnselectedItem.Render(line)
+}
+
+// renderEditingItem renders a workspace item in editing mode
+func (m WorkspacePaneModel) renderEditingItem(ws *domain.Workspace, width int) string {
+	// Icon
+	icon := IconFolderOpen
+	iconStyle := m.Styles.WorkspaceRoot
+
+	// Indentation
+	indent := strings.Repeat("  ", ws.Depth)
+
+	// Tree guide
+	treeGuide := ""
+	if ws.Depth > 0 {
+		treeGuide = m.Styles.TreeGuide.Render("├─ ")
+	}
+
+	iconRendered := iconStyle.Render(icon)
+
+	// Show edit buffer with cursor
+	editText := m.EditBuffer + "_"
+
+	line := fmt.Sprintf(">%s%s%s %s", indent, treeGuide, iconRendered, editText)
+	return m.Styles.EditingItem.Render(line)
+}
+
+// renderAddInput renders the add input line
+func (m WorkspacePaneModel) renderAddInput(width int) string {
+	icon := IconFolderOpen
+	iconStyle := m.Styles.WorkspaceRoot
+	iconRendered := iconStyle.Render(icon)
+
+	// Show edit buffer with cursor
+	editText := m.EditBuffer + "_"
+
+	line := fmt.Sprintf(">%s %s", iconRendered, editText)
+	return m.Styles.EditingItem.Render(line)
 }
